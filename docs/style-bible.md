@@ -139,14 +139,18 @@ These drive the HUD edge effects and stat color. Must read at a glance and stay 
 
 > One Chinese font + one English font. Must be free / commercial-OK for jam submission.
 
-| Use | Font | Notes |
-|-----|------|-------|
-| Chinese body | `____________` | e.g. 思源黑體 / 源樣明體 |
-| English body | `____________` | e.g. JetBrains Mono / Inter |
-| Numbers (HUD stats) | `____________` | Monospace recommended for stat readout |
-| Ending title | `____________` | Can be more decorative |
+| Use | Font | License | Notes |
+|-----|------|---------|-------|
+| Chinese body | **思源宋體 Source Han Serif TC** | SIL OFL 1.1 | 明體 (serif) over 黑體 — the slight serifs read "old book / quiet observer", matching §2's calm-horror voice and the "邊界 has agency" rule |
+| English body | **Inter** | SIL OFL 1.1 | Neutral sans-serif — pairs cleanly with the CJK serif in bilingual stat labels (「失控值 Instability」) without fighting it |
+| Numbers (HUD stats) | **JetBrains Mono** | SIL OFL 1.1 + Apache-2.0 | Monospace, strong at heavier weights — stays legible when colored toward brick / oxblood at high instability (see §3 "color thickens" rule) |
+| Ending title | **思源宋體 Heavy** | SIL OFL 1.1 | Same family as body, just heavier weight — finality without introducing a new font; matches ending lines like 「你沒有征服迷宮。你只是學會了停止。」 |
 
-**License check**: confirm every font is OFL or Apache-2.0 / similar before shipping.
+**License check ✅** — all four are SIL OFL 1.1 (JetBrains Mono is dual-licensed OFL + Apache-2.0). All jam-safe, no attribution gymnastics needed for submission.
+
+**Why 明體 not 黑體:** Source Han **Sans** would feel like a modern UI shell — too neutral for a game whose voice describes you being quietly watched. The 明體 serifs carry the same "literary observer" register as 「邊界會記住你的貪婪」.
+
+**Font stack note:** Body + ending share one family (Source Han Serif at different weights), keeping the loaded-font footprint small. Total = 3 unique families across the whole game.
 
 ---
 
@@ -202,6 +206,7 @@ Record any decision made during R0 here. Format: `[YYYY-MM-DD] decision — reas
 - `[2026-05-23]` Tone locked = "not-too-sweet cotton candy with quiet unease" (psychological-horror branch, OMORI visual register) — pre-commits §3 palette mood (pastel, low saturation) and §4 visual direction (OMORI-like soft pixel/flat) so T0.3 / T0.4 don't re-debate the surface feel. References: Inscryption, OMORI, Yume Nikki.
 - `[2026-05-23]` Voice locked = 中文 primary, English only on stat labels (失控值 Instability / 視野 Vision / 成就 Achievement). 「邊界」 is a speaking subject with agency. Affects HUD label widths (T0.5 font sizing must fit bilingual stat names) and all wall-hint / ending text (中文 only, no English subtitles).
 - `[2026-05-23]` Palette locked = warm cream floor + muted mauve walls + plum-tinted fog (never pure black), with rewards in tempting peach and a deliberately low-presence faded-mint real exit. Instability stages span pale-sage → butter-yellow → dusty-coral → brick-red → oxblood, with **strictly monotonic decreasing luminance** (216 → 200 → 156 → 103 → 36) so the HUD reads under colorblind conditions. Saturation rises and value falls with instability — "color thickens" is the rule, do not invert.
+- `[2026-05-23]` Fonts locked = **Source Han Serif TC** (中文 body + ending, 明體 chosen over 黑體 for literary "quiet observer" register) + **Inter** (English body) + **JetBrains Mono** (HUD numbers, heavy weights remain legible under brick/oxblood). All SIL OFL 1.1 — jam-safe, no attribution gymnastics. Body and ending share one CJK family at different weights to keep loaded-font footprint small.
 
 ---
 
