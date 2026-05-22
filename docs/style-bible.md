@@ -79,31 +79,35 @@ a pastel maze that watches you ruin yourself, one open door at a time.
 
 > 5–7 colors. Hex codes. **Instability stage colors are critical** — they drive the HUD's reversal signal.
 
-### Base palette (TBD)
+Direction inherits §1 + §8: *not-too-sweet cotton candy*, OMORI register, pastel surface hiding unease. Saturation stays low across the base palette; the **only** colors allowed to be punchy are the instability stages 3–5 (the "unease made visible").
+
+### Base palette
 
 | Role | Hex | Notes |
 |------|-----|-------|
-| Background (maze floor) | `#______` | |
-| Wall | `#______` | |
-| Fog of war | `#______` | Probably near-black with low opacity |
-| Player | `#______` | Must stand out against background |
-| Chest / key / core (rewards) | `#______` | Inviting, warm |
-| Real exit | `#______` | Subtle, easy to miss |
-| Fake exit | `#______` | Obvious, slightly garish |
+| Background (maze floor) | `#F0E8DC` | Warm cream — OMORI dream-room neutral, slightly warm so the maze never reads cold |
+| Wall | `#A98DAE` | Muted mauve — readable against floor without harsh contrast |
+| Fog of war | `#2A1F2E` | Deep plum near-black — **never pure black** (pure black against pastels feels wrong) |
+| Player | `#E89BA0` | Anxious coral — pops against cream by saturation, not luminance |
+| Chest / key / core (rewards) | `#F4C8A8` | Tempting peach — "looks like you want to pick it up" |
+| Real exit | `#B8D4C2` | Faded mint — deliberately low-presence; easy to walk past |
+| Fake exit | `#D8A8C8` | Pink-lavender — slightly more saturated than real exit; "look again" pull, still in pastel family |
 
 ### Instability stage colors (most important)
 
-These drive the HUD background and edge effects. Must read at a glance.
+These drive the HUD edge effects and stat color. Must read at a glance and stay legible under colorblind conditions.
 
-| Instability range | State | Color | Hex |
-|-------------------|-------|-------|-----|
-| 0–30 | 穩定 Stable | Green | `#______` |
-| 31–60 | 擴張 Expanding | Yellow | `#______` |
-| 61–80 | 扭曲 Distorting | Orange | `#______` |
-| 81–99 | 崩壞 Collapsing | Red | `#______` |
-| 100 | 失控 Lost | Deep red / black | `#______` |
+| Instability range | State | Color name | Hex | Luminance (Y) |
+|-------------------|-------|------------|-----|---------------|
+| 0–30 | 穩定 Stable | Pale sage | `#C8E0BC` | 216 |
+| 31–60 | 擴張 Expanding | Butter yellow | `#E8C870` | 200 |
+| 61–80 | 扭曲 Distorting | Dusty coral | `#D89060` | 156 |
+| 81–99 | 崩壞 Collapsing | Brick red | `#B85060` | 103 |
+| 100 | 失控 Lost | Oxblood | `#4A1828` | 36 |
 
-> ⚠️ Make sure the green → red gradient is **monotonic in luminance** so it works for colorblind players.
+> ✅ **Luminance is monotonically decreasing** (ITU-R BT.709 weights), ~50-step drops between stages. Colorblind players can resolve the state from brightness alone; hue rotation (green → yellow → orange → red) is the second signal, not the only one.
+
+**Design rule:** as instability rises, saturation goes **up** and value goes **down**. That visual move — "color thickens" — is the literal rendering of §1's "pastel surface hiding something quietly wrong." Do not invert this curve in subsequent UI work.
 
 ---
 
@@ -197,6 +201,7 @@ Record any decision made during R0 here. Format: `[YYYY-MM-DD] decision — reas
 
 - `[2026-05-23]` Tone locked = "not-too-sweet cotton candy with quiet unease" (psychological-horror branch, OMORI visual register) — pre-commits §3 palette mood (pastel, low saturation) and §4 visual direction (OMORI-like soft pixel/flat) so T0.3 / T0.4 don't re-debate the surface feel. References: Inscryption, OMORI, Yume Nikki.
 - `[2026-05-23]` Voice locked = 中文 primary, English only on stat labels (失控值 Instability / 視野 Vision / 成就 Achievement). 「邊界」 is a speaking subject with agency. Affects HUD label widths (T0.5 font sizing must fit bilingual stat names) and all wall-hint / ending text (中文 only, no English subtitles).
+- `[2026-05-23]` Palette locked = warm cream floor + muted mauve walls + plum-tinted fog (never pure black), with rewards in tempting peach and a deliberately low-presence faded-mint real exit. Instability stages span pale-sage → butter-yellow → dusty-coral → brick-red → oxblood, with **strictly monotonic decreasing luminance** (216 → 200 → 156 → 103 → 36) so the HUD reads under colorblind conditions. Saturation rises and value falls with instability — "color thickens" is the rule, do not invert.
 
 ---
 
