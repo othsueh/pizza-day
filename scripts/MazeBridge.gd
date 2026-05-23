@@ -20,11 +20,22 @@ const FOG_DARK_SOURCE := 1
 const PLAYER_SCENE := preload("res://scenes/Player.tscn")
 const PLAYER_SPAWN := Vector2i(1, 1)
 const MEMORY_TRAIL_SIZE := 8  ## Number of past stepped cells that stay dim before fading to dark
+const INTERACTABLE_SCRIPT := preload("res://scripts/Interactable.gd")
+const OBJECT_SCENES := {
+	"chest": preload("res://scenes/Chest.tscn"),
+	"key": preload("res://scenes/Key.tscn"),
+	"vision_core": preload("res://scenes/VisionCore.tscn")
+}
+const EXIT_SCENES := {
+	"false": preload("res://scenes/ExitFalse.tscn"),
+	"true": preload("res://scenes/ExitTrue.tscn")
+}
 
 @onready var tile_layer: TileMapLayer = $TileMapLayer
 @onready var fog_layer: TileMapLayer = $FogLayer
 @onready var game_state = $GameState
 @onready var hud = $HUD
+@onready var objects_root: Node2D = get_node_or_null("Objects")
 
 var _maze: Dictionary
 var _trail: Array = []  ## FIFO of past player cells (Vector2i), oldest first
@@ -39,6 +50,7 @@ func _ready() -> void:
 	_load_initial_stats(_maze)
 	_render_maze(_maze)
 	_init_fog(_maze)
+	_spawn_objects(_maze)
 	_spawn_player()
 
 func is_wall(cell: Vector2i) -> bool:
@@ -171,6 +183,34 @@ func _render_maze(maze: Dictionary) -> void:
 			tile_layer.set_cell(Vector2i(x, y), source_id, ATLAS_COORDS)
 	print("maze_core: rendered %dx%d, seed=%s" % [w, h, maze.get("seed", "?")])
 
+func _spawn_objects(maze: Dictionary) -> void:
+	if objects_root == null:
+		objects_root = Node2D.new()
+		objects_root.name = "Objects"
+		add_child(objects_root)
+	for child in objects_root.get_children():
+		child.queue_free()
+
+	var objects: Array = maze.get("objects", [])
+	for obj in objects:
+		if typeof(obj) != TYPE_DICTIONARY:
+			continue
+		var obj_type := String(obj.get("type", ""))
+		var scene: PackedScene = null
+		var exit_type := ""
+		if obj_type == "exit":
+			exit_type = String(obj.get("exit_type", ""))
+			scene = EXIT_SCENES.get(exit_type, null)
+		else:
+			scene = OBJECT_SCENES.get(obj_type, null)
+		if scene == null:
+			continue
+		var node := scene.instantiate()
+		_prepare_interactable(node)
+		var cell := Vector2i(int(obj.get("x", 0)), int(obj.get("y", 0)))
+		node.position = _cell_to_world(cell)
+		objects_root.add_child(node)
+
 func _init_fog(maze: Dictionary) -> void:
 	var w := int(maze.get("width", 0))
 	var h := int(maze.get("height", 0))
@@ -201,3 +241,15 @@ func _refresh_instability_stats() -> void:
 	var stats: Dictionary = result.get("stats", {})
 	var events: Dictionary = result.get("events", {})
 	game_state.apply_core_result(stats, int(events.get("instability_stage", 0)))
+
+func _cell_to_world(cell: Vector2i) -> Vector2:
+	var size := tile_layer.tile_set.tile_size
+	return Vector2(cell.x * size.x + size.x * 0.5, cell.y * size.y + size.y * 0.5)
+
+func _prepare_interactable(node: Node) -> void:
+	if node == null:
+		return
+	if not node.is_in_group("interactable"):
+		node.add_to_group("interactable")
+	if not node.has_method("interact") and node.get_script() == null:
+		node.set_script(INTERACTABLE_SCRIPT)
