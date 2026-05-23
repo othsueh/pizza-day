@@ -1,0 +1,17 @@
+[gd_resource type="TileSet" format=3 uid="uid://r7m6ostoynd7"]
+
+[ext_resource type="Texture2D" uid="uid://djky43qdnxurx" path="res://assets/tiles/fog_dim.png" id="1_dim"]
+[ext_resource type="Texture2D" uid="uid://bjsgnm3u02s5r" path="res://assets/tiles/fog_dark.png" id="2_dark"]
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_dim"]
+texture = ExtResource("1_dim")
+0:0/0 = 0
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_dark"]
+texture = ExtResource("2_dark")
+0:0/0 = 0
+
+[resource]
+tile_size = Vector2i(24, 24)
+sources/0 = SubResource("TileSetAtlasSource_dim")
+sources/1 = SubResource("TileSetAtlasSource_dark")
