@@ -1,13 +1,18 @@
 [gd_scene format=3 uid="uid://b34br7atrqtgv"]
 
 [ext_resource type="Texture2D" uid="uid://dovvsjokmgqgv" path="res://assets/sprites/exit_fake.png" id="1_core"]
+[ext_resource type="Script" path="res://scripts/VisionCore.gd" id="2_core_script"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ohneh"]
+size = Vector2(16, 16)
 
 [node name="VisionCore" type="Area2D" unique_id=1319950447]
+script = ExtResource("2_core_script")
 
 [node name="Sprite2D" type="Sprite2D" parent="." unique_id=1481357137]
 texture = ExtResource("1_core")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=1395871070]
 shape = SubResource("RectangleShape2D_ohneh")
+
+[node name="SfxPlayer" type="AudioStreamPlayer" parent="." unique_id=1974902455]

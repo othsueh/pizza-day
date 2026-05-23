@@ -96,6 +96,25 @@ func get_vision_radius() -> int:
 		return game_state.get_vision_radius()
 	return 1
 
+func get_vision_core_count() -> int:
+	if game_state and game_state.has_method("get_vision_core_count"):
+		return game_state.get_vision_core_count()
+	return 0
+
+func on_chest_opened() -> void:
+	if not game_state:
+		return
+	if game_state.has_method("apply_chest_open"):
+		game_state.apply_chest_open()
+	_refresh_instability_stats()
+
+func on_vision_core_picked() -> void:
+	if not game_state:
+		return
+	if game_state.has_method("apply_vision_core_pickup"):
+		game_state.apply_vision_core_pickup()
+	_refresh_instability_stats()
+
 func _is_in_bounds(cell: Vector2i) -> bool:
 	if _maze.is_empty():
 		return false

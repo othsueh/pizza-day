@@ -6,16 +6,12 @@ extends Node2D
 ## Notifies the parent after moving so fog can be updated.
 
 const CELL_SIZE := 24
-const MIN_VISION_RADIUS := 1  ## 3x3
-const MAX_VISION_RADIUS := 4  ## 9x9
+const DEFAULT_VISION_RADIUS := 1  ## 3x3
 const INTERACT_RANGE := 0
 
 @export var cell: Vector2i = Vector2i(1, 1)
 
 @onready var maze: Node2D = get_parent()
-
-var vision_radius: int = MIN_VISION_RADIUS
-var chest_count: int = 0
 
 var _nearest_interactable: Node = null
 var _hint_label: Label = null
@@ -24,8 +20,7 @@ func _ready() -> void:
 	_snap_to_cell()
 	_create_hint()
 	_update_interaction_hint()
-	if maze and maze.has_method("update_vision"):
-		maze.update_vision(cell, _current_vision_radius())
+	_refresh_vision()
 
 func _process(_delta: float) -> void:
 	_update_interaction_hint()
@@ -56,16 +51,19 @@ func _try_move(dir: Vector2i) -> void:
 	cell = target
 	_snap_to_cell()
 	_update_interaction_hint()
-	if maze and maze.has_method("update_vision"):
-		maze.update_vision(cell, _current_vision_radius())
+	_refresh_vision()
 
 func _snap_to_cell() -> void:
 	position = Vector2(cell.x * CELL_SIZE + CELL_SIZE / 2.0, cell.y * CELL_SIZE + CELL_SIZE / 2.0)
 
 func _current_vision_radius() -> int:
 	if maze and maze.has_method("get_vision_radius"):
-		return maze.get_vision_radius()
-	return VISION_RADIUS
+		return max(int(maze.get_vision_radius()), DEFAULT_VISION_RADIUS)
+	return DEFAULT_VISION_RADIUS
+
+func _refresh_vision() -> void:
+	if maze and maze.has_method("update_vision"):
+		maze.update_vision(cell, _current_vision_radius())
 
 func _create_hint() -> void:
 	_hint_label = Label.new()
@@ -109,11 +107,19 @@ func _try_interact() -> void:
 		_update_interaction_hint()
 
 func on_chest_opened() -> void:
-	chest_count += 1
-	vision_radius = min(vision_radius + 1, MAX_VISION_RADIUS)
-	if maze and maze.has_method("update_vision"):
-		maze.update_vision(cell, vision_radius)
-	print("chest opened: count=%d, vision=%dx%d" % [chest_count, vision_radius * 2 + 1, vision_radius * 2 + 1])
+	if maze and maze.has_method("on_chest_opened"):
+		maze.on_chest_opened()
+	_refresh_vision()
+
+func on_vision_core_picked() -> void:
+	if maze and maze.has_method("on_vision_core_picked"):
+		maze.on_vision_core_picked()
+	_refresh_vision()
+	var core_count := 0
+	if maze and maze.has_method("get_vision_core_count"):
+		core_count = int(maze.get_vision_core_count())
+	var radius := _current_vision_radius()
+	print("vision core picked: count=%d, vision=%dx%d" % [core_count, radius * 2 + 1, radius * 2 + 1])
 
 func _world_to_cell(world_pos: Vector2) -> Vector2i:
 	return Vector2i(int(floor(world_pos.x / CELL_SIZE)), int(floor(world_pos.y / CELL_SIZE)))

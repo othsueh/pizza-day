@@ -1,8 +1,9 @@
 [gd_scene format=3 uid="uid://oycdld7ive0s"]
 
-[ext_resource type="Texture2D" uid="uid://xdp4ythw2ha5" path="res://assets/sprites/exit_real.png" id="1_key"]
+[ext_resource type="Texture2D" path="res://assets/sprites/key.png" id="1_key"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_px33k"]
+size = Vector2(16, 16)
 
 [node name="Key" type="Area2D" unique_id=945707421]
 
