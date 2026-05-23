@@ -1,15 +1,15 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene format=3 uid="uid://vkx5qi60bp4c"]
 
 [ext_resource type="Script" path="res://scripts/Player.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/sprites/player.png" id="2_player"]
+[ext_resource type="Texture2D" uid="uid://cxw3hi4pahb2w" path="res://assets/sprites/player.png" id="2_player"]
 
-[node name="Player" type="Node2D"]
+[node name="Player" type="Node2D" unique_id=938137767]
 script = ExtResource("1_script")
 
-[node name="Sprite2D" type="Sprite2D" parent="."]
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=1216049987]
 texture = ExtResource("2_player")
 
-[node name="Camera2D" type="Camera2D" parent="."]
+[node name="Camera2D" type="Camera2D" parent="." unique_id=807710955]
 limit_left = 0
 limit_top = 0
 limit_right = 504

@@ -1,7 +1,7 @@
-[gd_resource type="TileSet" load_steps=5 format=3]
+[gd_resource type="TileSet" format=3 uid="uid://r7m6ostoynd7"]
 
-[ext_resource type="Texture2D" path="res://assets/tiles/fog_dim.png" id="1_dim"]
-[ext_resource type="Texture2D" path="res://assets/tiles/fog_dark.png" id="2_dark"]
+[ext_resource type="Texture2D" uid="uid://djky43qdnxurx" path="res://assets/tiles/fog_dim.png" id="1_dim"]
+[ext_resource type="Texture2D" uid="uid://bjsgnm3u02s5r" path="res://assets/tiles/fog_dark.png" id="2_dark"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_dim"]
 texture = ExtResource("1_dim")

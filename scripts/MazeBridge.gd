@@ -7,21 +7,26 @@ extends Node2D
 ##
 ## Source IDs:
 ##   maze_tileset.tres → 0 = floor, 1 = wall
-##   fog_tileset.tres  → 0 = dim (previously seen), 1 = dark (never seen)
+##   fog_tileset.tres  → 0 = dim (in step trail), 1 = dark (forgotten / never seen)
 ## Tile values from maze_core JSON are identity-mapped to source ids.
+## Memory model: step-based — only the last MEMORY_TRAIL_SIZE cells the player
+## actually stepped on stay dim; older steps fade to dark. (Spatial radius was
+## tried first but caused old paths to "reappear" when the player walked into
+## an adjacent corridor.)
 
 const ATLAS_COORDS := Vector2i(0, 0)
 const FOG_DIM_SOURCE := 0
 const FOG_DARK_SOURCE := 1
 const PLAYER_SCENE := preload("res://scenes/Player.tscn")
 const PLAYER_SPAWN := Vector2i(1, 1)
-const MEMORY_RADIUS := 4  ## Chebyshev radius around player where ever-seen cells stay dim; beyond this → dark
+const MEMORY_TRAIL_SIZE := 8  ## Number of past stepped cells that stay dim before fading to dark
 
 @onready var tile_layer: TileMapLayer = $TileMapLayer
 @onready var fog_layer: TileMapLayer = $FogLayer
 
 var _maze: Dictionary
-var _revealed: Dictionary  ## Vector2i → true; every cell that has ever been in vision
+var _trail: Array = []  ## FIFO of past player cells (Vector2i), oldest first
+var _last_center := Vector2i(-9999, -9999)  ## sentinel; first update_vision call won't push
 
 func _ready() -> void:
 	_maze = _run_maze_core()
@@ -43,6 +48,17 @@ func is_wall(cell: Vector2i) -> bool:
 func update_vision(center: Vector2i, vision_radius: int) -> void:
 	if _maze.is_empty():
 		return
+	if center != _last_center:
+		if _last_center != Vector2i(-9999, -9999):
+			_trail.push_back(_last_center)
+			if _trail.size() > MEMORY_TRAIL_SIZE:
+				_trail.pop_front()
+		_last_center = center
+
+	var trail_set: Dictionary = {}
+	for c in _trail:
+		trail_set[c] = true
+
 	var w := int(_maze.get("width", 0))
 	var h := int(_maze.get("height", 0))
 	for y in h:
@@ -51,15 +67,10 @@ func update_vision(center: Vector2i, vision_radius: int) -> void:
 			var cheb: int = max(abs(c.x - center.x), abs(c.y - center.y))
 			if cheb <= vision_radius:
 				fog_layer.set_cell(c, -1)
-			elif cheb <= MEMORY_RADIUS and _revealed.has(c):
+			elif trail_set.has(c):
 				fog_layer.set_cell(c, FOG_DIM_SOURCE, ATLAS_COORDS)
 			else:
 				fog_layer.set_cell(c, FOG_DARK_SOURCE, ATLAS_COORDS)
-	for dy in range(-vision_radius, vision_radius + 1):
-		for dx in range(-vision_radius, vision_radius + 1):
-			var c := center + Vector2i(dx, dy)
-			if _is_in_bounds(c):
-				_revealed[c] = true
 
 func _is_in_bounds(cell: Vector2i) -> bool:
 	if _maze.is_empty():
