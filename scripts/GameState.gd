@@ -80,8 +80,6 @@ func mark_explored(cell: Vector2i) -> bool:
 
 func apply_chest_open() -> void:
 	opened_chests += 1
-	vision_level = min(vision_level + 1, MAX_VISION_LEVEL)
-	max_vision_level_reached = max(max_vision_level_reached, vision_level)
 
 func apply_vision_core_pickup() -> void:
 	picked_vision_cores += 1
