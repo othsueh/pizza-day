@@ -25,6 +25,11 @@ const EXPANSION_OFFSET := 2
 const INTERACTABLE_SCRIPT := preload("res://scripts/Interactable.gd")
 const EXIT_SCRIPT := preload("res://scripts/Exit.gd")
 const WALL_HINT_SCRIPT := preload("res://scripts/WallHint.gd")
+const GREED_BUTTON_SCRIPT := preload("res://scripts/GreedButton.gd")
+const GREED_BUTTON_DELTA := 15
+const HIGH_INSTABILITY_THRESHOLD := 81
+const VISION_INTERFERENCE_INTERVAL := 0.75
+const INTRO_TEXT := "找到出口。\n每一個有用的東西，都會教迷宮變得更貪心。"
 const OBJECT_SCENES := {
 	"chest": preload("res://scenes/Chest.tscn"),
 	"key": preload("res://scenes/Key.tscn"),
@@ -91,6 +96,11 @@ var _has_key := false
 var _distortion_tween: Tween = null
 var _ending_transition_layer: CanvasLayer = null
 var _ending_fade: ColorRect = null
+var _intro_layer: CanvasLayer = null
+var _high_instability_active := false
+var _vision_interference_active := false
+var _vision_interference_timer := 0.0
+var _final_exit_type := ""
 
 func _ready() -> void:
 	if game_state and hud:
@@ -104,6 +114,19 @@ func _ready() -> void:
 	_init_fog(_maze)
 	_spawn_objects(_maze)
 	_spawn_player()
+	_play_intro_overlay()
+
+func _process(delta: float) -> void:
+	if _is_game_over:
+		return
+	if not _high_instability_active:
+		return
+	_vision_interference_timer += delta
+	if _vision_interference_timer < VISION_INTERFERENCE_INTERVAL:
+		return
+	_vision_interference_timer = 0.0
+	_vision_interference_active = not _vision_interference_active
+	_refresh_player_vision()
 
 func _input(event: InputEvent) -> void:
 	if not event is InputEventKey or not event.pressed or event.echo:
@@ -179,7 +202,10 @@ func update_vision(center: Vector2i, vision_radius: int) -> void:
 
 func get_vision_radius() -> int:
 	if game_state and game_state.has_method("get_vision_radius"):
-		return game_state.get_vision_radius()
+		var radius := int(game_state.get_vision_radius())
+		if _vision_interference_active:
+			return max(1, radius - 1)
+		return radius
 	return 1
 
 func get_vision_core_count() -> int:
@@ -223,11 +249,25 @@ func on_enemy_seen(source: Node = null) -> void:
 		game_state.apply_enemy_seen()
 	_refresh_instability_stats()
 
+func on_greed_button_pressed(source: Node = null) -> void:
+	if _is_game_over or not game_state or source == null:
+		return
+	_mark_object_consumed(source)
+	var target: Vector2i = source.get("target_wall")
+	if _is_wall_in_maze(_maze, target):
+		_set_tile_to_floor(target)
+	if game_state.has_method("apply_greed_button"):
+		game_state.apply_greed_button(int(source.get("instability_delta")))
+	if hud and hud.has_method("show_greed_feedback"):
+		hud.show_greed_feedback(int(source.get("instability_delta")))
+	_refresh_instability_stats()
+
 func on_exit_interacted(exit_type: String) -> void:
 	if _is_game_over:
 		return
 	if exit_type.is_empty():
 		return
+	_final_exit_type = exit_type
 	show_ending(judge_ending(exit_type, _current_instability()))
 
 func judge_ending(exit_type: String, instability: int) -> EndingType:
@@ -256,18 +296,24 @@ func _show_ending_after_transition(ending: EndingType) -> void:
 	await _fade_to_black()
 
 	var scene: PackedScene = ENDING_SCENES.get(ending, null)
+	var recap := _build_ending_recap()
 	if scene != null:
 		var screen := scene.instantiate() as CanvasLayer
 		if screen == null:
 			return
 		add_child(screen)
 		ending_screen = screen
-		if screen.has_method("show_default_ending"):
+		if screen.has_method("show_default_ending_with_recap"):
+			screen.show_default_ending_with_recap(recap)
+		elif screen.has_method("show_default_ending"):
 			screen.show_default_ending()
 	else:
 		var data: Dictionary = ENDING_TEXT.get(ending, ENDING_TEXT[EndingType.NORMAL])
 		if ending_screen and ending_screen.has_method("show_ending"):
-			ending_screen.show_ending(String(data["title"]), String(data["body"]), RESTART_HINT)
+			if ending_screen.has_method("show_ending_with_recap"):
+				ending_screen.show_ending_with_recap(String(data["title"]), String(data["body"]), RESTART_HINT, recap)
+			else:
+				ending_screen.show_ending(String(data["title"]), String(data["body"]), RESTART_HINT)
 	_play_ending_music(ending)
 
 func _fade_to_black() -> void:
@@ -344,6 +390,7 @@ func _run_maze_core_stats(stats: Dictionary) -> Dictionary:
 		str(int(stats.get("enemies", 0))),
 		str(int(stats.get("explored", 0))),
 		str(int(stats.get("previous_instability", 0))),
+		str(int(stats.get("bonus", 0))),
 	])
 	var exit_code := OS.execute(exe_path, args, output, true)
 	if exit_code != 0:
@@ -430,6 +477,11 @@ func _spawn_objects(maze: Dictionary) -> void:
 		if obj_type == "wall_text":
 			_spawn_wall_text(obj, _find_wall_hint_cell(maze, cell))
 			continue
+		var object_key := _object_key(obj_type, String(obj.get("exit_type", "")), cell, expansion_level)
+		if obj_type == "greed_button":
+			if not _consumed_object_keys.has(object_key):
+				_spawn_greed_button(obj, cell, object_key)
+			continue
 		var scene: PackedScene = null
 		var exit_type := ""
 		if obj_type == "exit":
@@ -439,7 +491,6 @@ func _spawn_objects(maze: Dictionary) -> void:
 			scene = OBJECT_SCENES.get(obj_type, null)
 		if scene == null:
 			continue
-		var object_key := _object_key(obj_type, exit_type, cell, expansion_level)
 		if obj_type != "exit" and obj_type != "enemy" and _consumed_object_keys.has(object_key):
 			continue
 		var node := scene.instantiate()
@@ -503,6 +554,43 @@ func _spawn_wall_text(obj: Dictionary, cell: Vector2i) -> void:
 	hint.add_child(collision)
 	objects_root.add_child(hint)
 
+func _spawn_greed_button(obj: Dictionary, cell: Vector2i, object_key: String) -> void:
+	var button := Area2D.new()
+	button.name = "GreedButton"
+	button.set_script(GREED_BUTTON_SCRIPT)
+	button.set("target_wall", _parse_target_wall(obj, cell))
+	button.set("instability_delta", int(obj.get("instability_delta", GREED_BUTTON_DELTA)))
+	button.set_meta("object_key", object_key)
+	button.set_meta("object_type", "greed_button")
+	button.position = _cell_to_world(cell)
+
+	var plate := ColorRect.new()
+	plate.name = "Plate"
+	plate.position = Vector2(-7.0, -7.0)
+	plate.size = Vector2(14.0, 14.0)
+	plate.color = Color(0.72, 0.14, 0.12, 0.92)
+	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	button.add_child(plate)
+
+	var label := Label.new()
+	label.name = "ButtonLabel"
+	label.text = "!"
+	label.position = Vector2(-6.0, -10.0)
+	label.size = Vector2(12.0, 16.0)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.76))
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	button.add_child(label)
+
+	var collision := CollisionShape2D.new()
+	var shape := RectangleShape2D.new()
+	shape.size = Vector2(18.0, 18.0)
+	collision.shape = shape
+	button.add_child(collision)
+	objects_root.add_child(button)
+
 func _objects_with_r2_fallback(maze: Dictionary) -> Array:
 	var objects: Array = maze.get("objects", []).duplicate()
 	var occupied: Dictionary = {}
@@ -538,6 +626,18 @@ func _objects_with_r2_fallback(maze: Dictionary) -> Array:
 				"x": cell.x,
 				"y": cell.y,
 				"patrol": patrol,
+			})
+	if not _objects_have_type(objects, "greed_button"):
+		var button_cell := _find_floor_with_wall_near(maze, Vector2i(10, 5), occupied)
+		var target_wall := _wall_neighbor_cell(maze, button_cell)
+		if target_wall != Vector2i.ZERO:
+			occupied[button_cell] = true
+			objects.append({
+				"type": "greed_button",
+				"x": button_cell.x,
+				"y": button_cell.y,
+				"target_wall": [target_wall.x, target_wall.y],
+				"instability_delta": GREED_BUTTON_DELTA,
 			})
 	return objects
 
@@ -575,6 +675,20 @@ func _find_floor_near(maze: Dictionary, preferred: Vector2i, occupied: Dictionar
 					return cell
 	return preferred
 
+func _find_floor_with_wall_near(maze: Dictionary, preferred: Vector2i, occupied: Dictionary) -> Vector2i:
+	var w := int(maze.get("width", 0))
+	var h := int(maze.get("height", 0))
+	var max_radius: int = max(w, h)
+	for radius in range(max_radius):
+		for dy in range(-radius, radius + 1):
+			for dx in range(-radius, radius + 1):
+				var cell := preferred + Vector2i(dx, dy)
+				if occupied.has(cell):
+					continue
+				if _is_floor_in_maze(maze, cell) and _wall_neighbor_cell(maze, cell) != Vector2i.ZERO:
+					return cell
+	return _find_floor_near(maze, preferred, occupied)
+
 func _fallback_patrol_for_cell(maze: Dictionary, cell: Vector2i) -> Array:
 	var directions: Array[Vector2i] = [Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT, Vector2i.UP]
 	for dir in directions:
@@ -598,6 +712,14 @@ func _is_floor_in_maze(maze: Dictionary, cell: Vector2i) -> bool:
 
 func _has_wall_neighbor(maze: Dictionary, cell: Vector2i) -> bool:
 	return _wall_neighbor_direction(maze, cell) != Vector2i.ZERO
+
+func _wall_neighbor_cell(maze: Dictionary, cell: Vector2i) -> Vector2i:
+	var directions: Array[Vector2i] = [Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT, Vector2i.UP]
+	for dir in directions:
+		var target := cell + dir
+		if _is_wall_in_maze(maze, target):
+			return target
+	return Vector2i.ZERO
 
 func _wall_neighbor_direction(maze: Dictionary, cell: Vector2i) -> Vector2i:
 	var directions: Array[Vector2i] = [Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT, Vector2i.UP]
@@ -630,6 +752,12 @@ func _parse_patrol_cells(obj: Dictionary, fallback: Vector2i) -> Array:
 		cells.append(fallback)
 	return cells
 
+func _parse_target_wall(obj: Dictionary, fallback_cell: Vector2i) -> Vector2i:
+	var target: Variant = obj.get("target_wall", [])
+	if typeof(target) == TYPE_ARRAY and target.size() >= 2:
+		return Vector2i(int(target[0]), int(target[1]))
+	return _wall_neighbor_cell(_maze, fallback_cell)
+
 func _init_fog(maze: Dictionary) -> void:
 	var w := int(maze.get("width", 0))
 	var h := int(maze.get("height", 0))
@@ -650,6 +778,7 @@ func _load_initial_stats(maze: Dictionary) -> void:
 	if not game_state:
 		return
 	var stats: Dictionary = maze.get("stats", {})
+	stats["total_walkable"] = _count_walkable_tiles(maze)
 	var events: Dictionary = maze.get("events", {})
 	game_state.reset_from_core(
 		stats,
@@ -672,6 +801,7 @@ func _refresh_instability_stats() -> void:
 		return
 	var stats: Dictionary = result.get("stats", {})
 	var events: Dictionary = result.get("events", {})
+	_apply_bonus_stats_fallback(stats, events, int(core_stats["previous_instability"]), int(core_stats.get("bonus", 0)))
 	game_state.apply_core_result(
 		stats,
 		int(events.get("instability_stage", 0)),
@@ -703,6 +833,8 @@ func _try_expand_maze(instability_stage: int) -> void:
 
 func _apply_maze_state(maze: Dictionary) -> void:
 	_maze = maze
+	if game_state and game_state.has_method("set_total_walkable_tiles"):
+		game_state.set_total_walkable_tiles(_count_walkable_tiles(_maze))
 	_trail.clear()
 	_last_center = Vector2i(-9999, -9999)
 	_render_maze(_maze)
@@ -717,8 +849,16 @@ func _apply_maze_state(maze: Dictionary) -> void:
 
 func _apply_instability_side_effects(instability: int) -> void:
 	var active := instability >= 61 and not _is_game_over
+	var high_active := instability >= HIGH_INSTABILITY_THRESHOLD and not _is_game_over
 	if hud and hud.has_method("set_distortion_active"):
 		hud.set_distortion_active(active)
+	if hud and hud.has_method("set_collapse_effect_active"):
+		hud.set_collapse_effect_active(high_active)
+	if high_active != _high_instability_active:
+		_high_instability_active = high_active
+		_vision_interference_timer = 0.0
+		_vision_interference_active = false
+		_refresh_player_vision()
 	if active:
 		if _distortion_tween != null and _distortion_tween.is_valid():
 			return
@@ -734,6 +874,25 @@ func _apply_instability_side_effects(instability: int) -> void:
 		_distortion_tween = null
 		tile_layer.modulate = Color.WHITE
 		fog_layer.modulate = Color.WHITE
+
+func _apply_bonus_stats_fallback(stats: Dictionary, events: Dictionary, previous_instability: int, bonus: int) -> void:
+	if bonus <= 0 or stats.has("bonus"):
+		return
+	var adjusted_instability: int = clampi(int(stats.get("instability", 0)) + bonus, 0, 100)
+	stats["bonus"] = bonus
+	stats["instability"] = adjusted_instability
+	events["instability_stage"] = _instability_stage_for(adjusted_instability)
+	events["critical_state"] = adjusted_instability >= 70
+	events["critical_event_triggered"] = previous_instability < 70 and adjusted_instability >= 70
+
+func _instability_stage_for(instability: int) -> int:
+	if instability >= 81:
+		return 3
+	if instability >= 61:
+		return 2
+	if instability >= 31:
+		return 1
+	return 0
 
 func _trigger_critical_sequence() -> void:
 	if critical_event_controller and critical_event_controller.has_method("trigger_critical_sequence"):
@@ -790,6 +949,81 @@ func _play_expansion_feedback() -> void:
 		_player.play_expansion_camera_feedback()
 	if hud and hud.has_method("show_expansion_feedback"):
 		hud.show_expansion_feedback()
+
+func _set_tile_to_floor(cell: Vector2i) -> void:
+	if not _is_in_bounds(cell):
+		return
+	var tiles: Array = _maze.get("tiles", [])
+	var row: Array = tiles[cell.y]
+	row[cell.x] = 0
+	tiles[cell.y] = row
+	_maze["tiles"] = tiles
+	tile_layer.set_cell(cell, 0, ATLAS_COORDS)
+	fog_layer.set_cell(cell, FOG_DARK_SOURCE, ATLAS_COORDS)
+	if game_state and game_state.has_method("set_total_walkable_tiles"):
+		game_state.set_total_walkable_tiles(_count_walkable_tiles(_maze))
+
+func _count_walkable_tiles(maze: Dictionary) -> int:
+	var count := 0
+	var w := int(maze.get("width", 0))
+	var h := int(maze.get("height", 0))
+	var tiles: Array = maze.get("tiles", [])
+	for y in h:
+		if y >= tiles.size():
+			continue
+		var row: Array = tiles[y]
+		for x in w:
+			if x < row.size() and int(row[x]) == 0:
+				count += 1
+	return count
+
+func _refresh_player_vision() -> void:
+	if _is_game_over:
+		return
+	if _player == null:
+		return
+	update_vision(_get_player_cell(), get_vision_radius())
+
+func _build_ending_recap() -> String:
+	if game_state and game_state.has_method("build_ending_recap"):
+		return game_state.build_ending_recap(_final_exit_type)
+	return ""
+
+func _play_intro_overlay() -> void:
+	if _player:
+		_player.set_process_unhandled_input(false)
+	_intro_layer = CanvasLayer.new()
+	_intro_layer.layer = 35
+	add_child(_intro_layer)
+
+	var shade := ColorRect.new()
+	shade.color = Color(0.047, 0.035, 0.059, 0.78)
+	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_intro_layer.add_child(shade)
+
+	var label := Label.new()
+	label.text = INTRO_TEXT
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_size_override("font_size", 16)
+	label.add_theme_color_override("font_color", Color(0.94, 0.86, 0.88))
+	_intro_layer.add_child(label)
+
+	await get_tree().create_timer(2.0).timeout
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(shade, "color:a", 0.0, 0.55)
+	tween.tween_property(label, "modulate:a", 0.0, 0.55)
+	await tween.finished
+	if _intro_layer:
+		_intro_layer.queue_free()
+		_intro_layer = null
+	if _player and not _is_game_over:
+		_player.set_process_unhandled_input(true)
 
 func _current_instability() -> int:
 	if game_state == null:

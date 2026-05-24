@@ -23,10 +23,12 @@ var _expansion_label: Label = null
 var _expansion_flash: ColorRect = null
 var _critical_label: Label = null
 var _critical_flash: ColorRect = null
+var _collapse_noise: ColorRect = null
 var _debug_panel: Panel = null
 var _debug_label: Label = null
 var _debug_snapshot: Dictionary = {}
 var _distortion_active := false
+var _collapse_effect_active := false
 var _panel_base_position := Vector2.ZERO
 
 func _ready() -> void:
@@ -36,15 +38,19 @@ func _ready() -> void:
 	_create_critical_label()
 	_create_expansion_flash()
 	_create_expansion_label()
+	_create_collapse_noise()
 	_create_debug_overlay()
 
 func _process(_delta: float) -> void:
 	if panel == null:
 		return
 	if _distortion_active:
-		panel.position = _panel_base_position + Vector2(randf_range(-1.4, 1.4), randf_range(-1.0, 1.0))
+		var amount := 2.6 if _collapse_effect_active else 1.4
+		panel.position = _panel_base_position + Vector2(randf_range(-amount, amount), randf_range(-amount, amount))
 	else:
 		panel.position = _panel_base_position
+	if _collapse_noise and _collapse_effect_active:
+		_collapse_noise.color.a = randf_range(0.035, 0.11)
 
 func update_stats(vision_text: String, achievement: int, instability: int, stage: int, critical_state: bool = false) -> void:
 	vision_label.text = "Vision: %s" % vision_text
@@ -70,6 +76,29 @@ func set_distortion_active(active: bool) -> void:
 	_distortion_active = active
 	if not active and panel:
 		panel.position = _panel_base_position
+
+func set_collapse_effect_active(active: bool) -> void:
+	_collapse_effect_active = active
+	if _collapse_noise == null:
+		_create_collapse_noise()
+	_collapse_noise.visible = active
+	if not active:
+		_collapse_noise.color.a = 0.0
+
+func show_greed_feedback(delta: int) -> void:
+	if _expansion_label == null:
+		return
+	_pulse_instability_label()
+	_expansion_label.text = "Instability +%d" % delta
+	_expansion_label.visible = true
+	_expansion_label.modulate = Color(1.0, 0.24, 0.16, 1.0)
+	var base_position := _expansion_label.position
+	var tween := create_tween()
+	tween.tween_property(_expansion_label, "position:y", base_position.y - 5.0, 0.07)
+	tween.tween_property(_expansion_label, "position:y", base_position.y, 0.07)
+	tween.tween_property(_expansion_label, "modulate:a", 0.0, 0.9)
+	await tween.finished
+	_expansion_label.visible = false
 
 func show_critical_sequence() -> void:
 	_pulse_instability_label()
@@ -193,6 +222,10 @@ func _render_debug_overlay() -> void:
 	var puzzles := int(_debug_snapshot.get("puzzles_solved", 0))
 	var enemies := int(_debug_snapshot.get("enemies_seen", 0))
 	var explored := int(_debug_snapshot.get("explored_tiles", 0))
+	var total_walkable := int(_debug_snapshot.get("total_walkable_tiles", 0))
+	var exploration_percent := float(_debug_snapshot.get("exploration_percent", 0.0))
+	var greed_buttons := int(_debug_snapshot.get("greed_buttons", 0))
+	var bonus_instability := int(_debug_snapshot.get("bonus_instability", 0))
 	var instability := int(_debug_snapshot.get("instability", 0))
 	var explored_score := int(floor(float(explored) / 10.0))
 	_debug_label.text = (
@@ -201,7 +234,9 @@ func _render_debug_overlay() -> void:
 		+ "Opened Chests: %d       x5  = %d\n" % [chests, chests * 5]
 		+ "Puzzles Solved: %d      x8  = %d\n" % [puzzles, puzzles * 8]
 		+ "Enemies Seen: %d        x3  = %d\n" % [enemies, enemies * 3]
-		+ "Explored Tiles: %d      /10 = %d\n\n" % [explored, explored_score]
+		+ "Explored Tiles: %d/%d  %.0f%%\n" % [explored, total_walkable, exploration_percent]
+		+ "Explored Score:         /10 = %d\n" % explored_score
+		+ "Greed Buttons: %d       bonus = %d\n\n" % [greed_buttons, bonus_instability]
 		+ "Total Instability: %d\n" % instability
 		+ "Expansion Threshold: 31\n"
 		+ "Distortion Threshold: 61\n"
@@ -225,6 +260,15 @@ func _create_critical_flash() -> void:
 	_critical_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_critical_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_critical_flash)
+
+func _create_collapse_noise() -> void:
+	_collapse_noise = ColorRect.new()
+	_collapse_noise.visible = false
+	_collapse_noise.color = Color(1.0, 0.04, 0.04, 0.0)
+	_collapse_noise.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_collapse_noise.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_collapse_noise.z_index = 5
+	add_child(_collapse_noise)
 
 func _flash_screen() -> void:
 	if _expansion_flash == null:

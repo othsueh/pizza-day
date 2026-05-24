@@ -6,7 +6,7 @@
  *
  * Usage:
  *   maze_core [output_path] [seed]
- *   maze_core --stats output_path vision chests puzzles enemies explored [previous_instability]
+ *   maze_core --stats output_path vision chests puzzles enemies explored [previous_instability] [bonus_instability]
  *   maze_core --expand output_path seed player_x player_y
  *
  * Defaults: output_path = "maze_state.json" (cwd), seed = time(NULL).
@@ -24,7 +24,7 @@
  *     "expanded_this_frame": <bool>,
  *     "player": {"x": <int>, "y": <int>},
  *     "tiles":  [[<int>, ...], ...],  // 0 = floor, 1 = wall, row-major
- *     "objects": [{"type":"chest|key|vision_core|exit|wall_text|enemy", "exit_type":"false|true", "x": <int>, "y": <int>}, ...],
+ *     "objects": [{"type":"chest|key|vision_core|exit|wall_text|enemy|greed_button", "exit_type":"false|true", "x": <int>, "y": <int>}, ...],
  *     "stats":  { ... },
  *     "events": { ... }
  *   }
@@ -81,7 +81,7 @@ static int clamp_int(int value, int min_value, int max_value) {
     return value;
 }
 
-int calculate_instability(int vision, int chests, int puzzles, int enemies, int explored) {
+int calculate_instability_with_bonus(int vision, int chests, int puzzles, int enemies, int explored, int bonus) {
     int value = 0;
 
     value += vision * 10;
@@ -89,8 +89,13 @@ int calculate_instability(int vision, int chests, int puzzles, int enemies, int 
     value += puzzles * 8;
     value += enemies * 3;
     value += explored / 10;
+    value += bonus;
 
     return clamp_int(value, 0, 100);
+}
+
+int calculate_instability(int vision, int chests, int puzzles, int enemies, int explored) {
+    return calculate_instability_with_bonus(vision, chests, puzzles, enemies, explored, 0);
 }
 
 static int get_instability_stage(int instability) {
@@ -538,9 +543,10 @@ static int write_stats_json(
     int puzzles,
     int enemies,
     int explored,
-    int previous_instability
+    int previous_instability,
+    int bonus_instability
 ) {
-    int instability = calculate_instability(vision, chests, puzzles, enemies, explored);
+    int instability = calculate_instability_with_bonus(vision, chests, puzzles, enemies, explored, bonus_instability);
     int instability_stage = get_instability_stage(instability);
     int critical_state = is_critical_state(instability);
     int critical_event_triggered = did_trigger_critical_event(previous_instability, instability);
@@ -560,6 +566,7 @@ static int write_stats_json(
         "    \"puzzles\": %d,\n"
         "    \"enemies\": %d,\n"
         "    \"explored\": %d,\n"
+        "    \"bonus\": %d,\n"
         "    \"instability\": %d\n"
         "  },\n"
         "  \"events\": {\n"
@@ -573,6 +580,7 @@ static int write_stats_json(
         puzzles,
         enemies,
         explored,
+        bonus_instability,
         instability,
         instability_stage,
         critical_state ? "true" : "false",
@@ -584,9 +592,10 @@ static int write_stats_json(
 int main(int argc, char **argv) {
     if (argc > 1 && strcmp(argv[1], "--stats") == 0) {
         if (argc < 8) {
-            fprintf(stderr, "usage: maze_core --stats output_path vision chests puzzles enemies explored [previous_instability]\n");
+            fprintf(stderr, "usage: maze_core --stats output_path vision chests puzzles enemies explored [previous_instability] [bonus_instability]\n");
             return 1;
         }
+        int bonus_instability = (argc > 9) ? atoi(argv[9]) : 0;
         int previous_instability = (argc > 8) ? atoi(argv[8]) : calculate_instability(
             atoi(argv[3]),
             atoi(argv[4]),
@@ -601,7 +610,8 @@ int main(int argc, char **argv) {
             atoi(argv[5]),
             atoi(argv[6]),
             atoi(argv[7]),
-            previous_instability
+            previous_instability,
+            bonus_instability
         );
     }
 
