@@ -7,4 +7,4 @@ func _ready() -> void:
 
 func interact(player: Node = null) -> void:
 	if player and player.has_method("on_wall_hint_read"):
-		player.on_wall_hint_read(hint_text)
+		player.on_wall_hint_read(hint_text, self)

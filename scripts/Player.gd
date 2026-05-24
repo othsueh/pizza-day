@@ -230,13 +230,15 @@ func _cancel_pending_interaction() -> void:
 		_confirmation_layer.visible = false
 	_update_interaction_hint()
 
-func on_wall_hint_read(text: String) -> void:
+func on_wall_hint_read(text: String, source: Node = null) -> void:
 	_pending_confirmation = null
 	_is_reading_hint = true
 	if _confirmation_layer == null:
 		_create_confirmation_prompt()
 	_confirmation_label.text = "%s\n\nE / Enter / Esc：關閉" % text
 	_confirmation_layer.visible = true
+	if source and maze and maze.has_method("on_wall_hint_read"):
+		maze.on_wall_hint_read(source)
 
 func _close_wall_hint() -> void:
 	_is_reading_hint = false
