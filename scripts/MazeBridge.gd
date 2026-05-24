@@ -101,6 +101,7 @@ var _intro_layer: CanvasLayer = null
 var _high_instability_active := false
 var _vision_interference_active := false
 var _vision_interference_timer := 0.0
+var _final_exit_type := ""
 
 func _ready() -> void:
 	if game_state and hud:
@@ -249,6 +250,13 @@ func on_enemy_seen(source: Node = null) -> void:
 		game_state.apply_enemy_seen()
 	_refresh_instability_stats()
 
+func on_wall_hint_read(source: Node = null) -> void:
+	if _is_game_over or not game_state or source == null:
+		return
+	if not game_state.has_method("mark_wall_hint_read"):
+		return
+	game_state.mark_wall_hint_read(String(source.get("hint_text")))
+
 func on_greed_button_pressed(source: Node = null) -> void:
 	if _is_game_over or not game_state or source == null:
 		return
@@ -267,6 +275,7 @@ func on_exit_interacted(exit_type: String) -> void:
 		return
 	if exit_type.is_empty():
 		return
+	_final_exit_type = exit_type
 	show_ending(judge_ending(exit_type, _current_instability()))
 
 func judge_ending(exit_type: String, instability: int) -> EndingType:
@@ -297,15 +306,21 @@ func _show_ending_after_transition(ending: EndingType) -> void:
 	var scene: PackedScene = ENDING_SCENES.get(ending, null)
 	var recap := _build_ending_recap()
 	var override := _ending_body_override(ending)
+	var badges := _evaluate_badges(ending)
 	if scene != null:
 		var screen := scene.instantiate() as CanvasLayer
 		if screen == null:
 			return
 		add_child(screen)
 		ending_screen = screen
-		if not override.is_empty() and screen.has_method("show_ending_with_recap"):
+		if not override.is_empty() and screen.has_method("show_ending_with_recap_and_badges"):
+			var data: Dictionary = ENDING_TEXT.get(ending, ENDING_TEXT[EndingType.NORMAL])
+			screen.show_ending_with_recap_and_badges(String(data["title"]), override, RESTART_HINT, recap, badges)
+		elif not override.is_empty() and screen.has_method("show_ending_with_recap"):
 			var data: Dictionary = ENDING_TEXT.get(ending, ENDING_TEXT[EndingType.NORMAL])
 			screen.show_ending_with_recap(String(data["title"]), override, RESTART_HINT, recap)
+		elif screen.has_method("show_default_ending_with_recap_and_badges"):
+			screen.show_default_ending_with_recap_and_badges(recap, badges)
 		elif screen.has_method("show_default_ending_with_recap"):
 			screen.show_default_ending_with_recap(recap)
 		elif screen.has_method("show_default_ending"):
@@ -314,11 +329,18 @@ func _show_ending_after_transition(ending: EndingType) -> void:
 		var data: Dictionary = ENDING_TEXT.get(ending, ENDING_TEXT[EndingType.NORMAL])
 		var body := override if not override.is_empty() else String(data["body"])
 		if ending_screen and ending_screen.has_method("show_ending"):
-			if ending_screen.has_method("show_ending_with_recap"):
+			if ending_screen.has_method("show_ending_with_recap_and_badges"):
+				ending_screen.show_ending_with_recap_and_badges(String(data["title"]), body, RESTART_HINT, recap, badges)
+			elif ending_screen.has_method("show_ending_with_recap"):
 				ending_screen.show_ending_with_recap(String(data["title"]), body, RESTART_HINT, recap)
 			else:
 				ending_screen.show_ending(String(data["title"]), body, RESTART_HINT)
 	_play_ending_music(ending)
+
+func _evaluate_badges(ending: EndingType) -> Array:
+	if game_state == null or not game_state.has_method("evaluate_achievements"):
+		return []
+	return game_state.evaluate_achievements(int(ending), _final_exit_type)
 
 func _ending_body_override(ending: EndingType) -> String:
 	if ending == EndingType.TRUE and game_state and int(game_state.opened_chests) > 0:
@@ -522,9 +544,12 @@ func _spawn_wall_text(obj: Dictionary, cell: Vector2i) -> void:
 	var hint := Area2D.new()
 	hint.name = "WallHint"
 	hint.set_script(WALL_HINT_SCRIPT)
-	hint.set("hint_text", String(obj.get("text", "The wall remembers.")))
+	var hint_text := String(obj.get("text", "The wall remembers."))
+	hint.set("hint_text", hint_text)
 	hint.set_meta("object_type", "wall_hint")
 	hint.position = _cell_to_world(cell)
+	if game_state and game_state.has_method("register_wall_hint"):
+		game_state.register_wall_hint(hint_text)
 
 	var marker_root := Node2D.new()
 	marker_root.name = "WallMark"
