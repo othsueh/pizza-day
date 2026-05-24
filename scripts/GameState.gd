@@ -9,6 +9,10 @@ signal stats_changed(vision_label: String, achievement: int, instability: int, s
 const MIN_VISION_LEVEL := 1  ## 3x3
 const MAX_VISION_LEVEL := 4  ## 9x9
 
+const ENDING_BAD := 0
+const ENDING_NORMAL := 1
+const ENDING_TRUE := 2
+
 var vision_level: int = 1
 var opened_chests: int = 0
 var picked_vision_cores: int = 0
@@ -22,7 +26,13 @@ var instability: int = 0
 var instability_stage: int = 0
 var critical_state: bool = false
 
+var max_vision_level_reached: int = 1
+var critical_state_ever_triggered: bool = false
+var total_wall_hints_in_run: int = 0
+
 var _explored_cells: Dictionary = {}
+var _wall_hint_texts: Dictionary = {}
+var _wall_hints_read: Dictionary = {}
 
 func reset_from_core(stats: Dictionary, stage: int, is_critical: bool = false) -> void:
 	vision_level = int(clamp(int(stats.get("vision", vision_level)), MIN_VISION_LEVEL, MAX_VISION_LEVEL))
@@ -37,7 +47,12 @@ func reset_from_core(stats: Dictionary, stage: int, is_critical: bool = false) -
 	instability = int(stats.get("instability", instability))
 	instability_stage = stage
 	critical_state = is_critical
+	max_vision_level_reached = vision_level
+	critical_state_ever_triggered = is_critical
+	total_wall_hints_in_run = 0
 	_explored_cells.clear()
+	_wall_hint_texts.clear()
+	_wall_hints_read.clear()
 	_emit_stats_changed()
 
 func apply_core_result(stats: Dictionary, stage: int, is_critical: bool = false) -> void:
@@ -51,6 +66,9 @@ func apply_core_result(stats: Dictionary, stage: int, is_critical: bool = false)
 	instability = int(stats.get("instability", instability))
 	instability_stage = stage
 	critical_state = is_critical
+	max_vision_level_reached = max(max_vision_level_reached, vision_level)
+	if is_critical:
+		critical_state_ever_triggered = true
 	_emit_stats_changed()
 
 func mark_explored(cell: Vector2i) -> bool:
@@ -63,10 +81,26 @@ func mark_explored(cell: Vector2i) -> bool:
 func apply_chest_open() -> void:
 	opened_chests += 1
 	vision_level = min(vision_level + 1, MAX_VISION_LEVEL)
+	max_vision_level_reached = max(max_vision_level_reached, vision_level)
 
 func apply_vision_core_pickup() -> void:
 	picked_vision_cores += 1
 	vision_level = min(vision_level + 2, MAX_VISION_LEVEL)
+	max_vision_level_reached = max(max_vision_level_reached, vision_level)
+
+func register_wall_hint(hint_text: String) -> void:
+	if hint_text.is_empty():
+		return
+	_wall_hint_texts[hint_text] = true
+	total_wall_hints_in_run = _wall_hint_texts.size()
+
+func mark_wall_hint_read(hint_text: String) -> void:
+	if hint_text.is_empty():
+		return
+	_wall_hints_read[hint_text] = true
+
+func get_wall_hints_read_count() -> int:
+	return _wall_hints_read.size()
 
 func apply_enemy_seen() -> void:
 	defeated_enemies += 1
@@ -122,6 +156,86 @@ func get_debug_snapshot() -> Dictionary:
 		"instability": instability,
 		"critical_state": critical_state,
 	}
+
+func evaluate_achievements(ending_type: int, exit_type: String) -> Array:
+	var badges: Array = []
+	var exploration_pct := get_exploration_percent()
+	var hints_read := get_wall_hints_read_count()
+
+	match ending_type:
+		ENDING_TRUE:
+			if opened_chests == 0 and picked_vision_cores == 0:
+				badges.append({
+					"title": "空手而歸",
+					"body": "你經過了所有發亮的東西，沒有伸手。",
+				})
+			if max_vision_level_reached == MIN_VISION_LEVEL:
+				badges.append({
+					"title": "不眨眼",
+					"body": "三格的視野，足以走到底。",
+				})
+			if greed_buttons_pressed == 0:
+				badges.append({
+					"title": "拒絕之人",
+					"body": "紅色的按鈕，沒有等到第二聲心跳。",
+				})
+			if instability <= 20:
+				badges.append({
+					"title": "邊界的守者",
+					"body": "不穩定度不到二十，迷宮幾乎沒注意到你來過。",
+				})
+			if total_wall_hints_in_run > 0 and hints_read >= total_wall_hints_in_run:
+				badges.append({
+					"title": "牆的傾聽者",
+					"body": "你讀完了牆上所有字。它們是寫給願意停下的人。",
+				})
+			if critical_state_ever_triggered:
+				badges.append({
+					"title": "無視警告",
+					"body": "它叫過你停下。你聽到了，繼續走，然後走出去了。",
+				})
+			if exploration_pct < 30.0:
+				badges.append({
+					"title": "第一個轉身",
+					"body": "你只看了三成，就知道夠了。",
+				})
+		ENDING_NORMAL:
+			badges.append({
+				"title": "你走出去了",
+				"body": "一個誠實的離開。",
+			})
+			if instability >= 50 and instability <= 69:
+				badges.append({
+					"title": "半個自己",
+					"body": "你帶走了一些自己，也留了一些下來。",
+				})
+			if exit_type == "false" and instability < 30:
+				badges.append({
+					"title": "錯過真相",
+					"body": "你明明可以走另一扇門的。",
+				})
+		ENDING_BAD:
+			badges.append({
+				"title": "被記住的人",
+				"body": "不穩定度滿了。出口開始把你忘記。",
+			})
+			if greed_buttons_pressed >= 2:
+				badges.append({
+					"title": "餵飽迷宮",
+					"body": "你親手把牆變短。它把這件事記下來了。",
+				})
+			if opened_chests >= 3 and picked_vision_cores >= 1:
+				badges.append({
+					"title": "完美的失敗",
+					"body": "你做對了所有「該做」的事，然後迷宮收下了你。",
+				})
+			if greed_buttons_pressed == 0:
+				badges.append({
+					"title": "被迷宮選中",
+					"body": "你沒按任何按鈕，光是好奇就足夠了。",
+				})
+
+	return badges
 
 func build_ending_recap() -> String:
 	var explored_text := "%d / %d tiles (%.0f%%)" % [
