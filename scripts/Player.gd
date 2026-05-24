@@ -163,7 +163,8 @@ func _try_interact() -> void:
 		_update_interaction_hint()
 
 func _requires_confirmation(node: Node) -> bool:
-	return String(node.get_meta("object_type", "")) == "vision_core"
+	var object_type := String(node.get_meta("object_type", ""))
+	return object_type == "vision_core" or object_type == "greed_button"
 
 func _show_confirmation_prompt(node: Node) -> void:
 	_pending_confirmation = node
@@ -173,12 +174,17 @@ func _show_confirmation_prompt(node: Node) -> void:
 	if maze and maze.has_method("get_instability_value"):
 		instability = int(maze.get_instability_value())
 	var message := "Take the vision core?\nThe maze will remember this."
-	if instability >= 70:
-		message = "Take more from the maze?\nIt is already looking back."
-	elif instability >= 61:
-		message = "Take the vision core?\nThe walls are thin now."
-	elif instability >= 31:
-		message = "Take the vision core?\nThe maze has started to move."
+	if String(node.get_meta("object_type", "")) == "greed_button":
+		message = "Press the red button?\nA wall opens. Instability rises."
+		if instability >= 70:
+			message = "Press it anyway?\nThe maze is already looking back."
+	else:
+		if instability >= 70:
+			message = "Take more from the maze?\nIt is already looking back."
+		elif instability >= 61:
+			message = "Take the vision core?\nThe walls are thin now."
+		elif instability >= 31:
+			message = "Take the vision core?\nThe maze has started to move."
 	_confirmation_label.text = "%s\n\nE / Enter: take    Esc / Q: leave" % message
 	_confirmation_layer.visible = true
 
@@ -258,6 +264,11 @@ func on_vision_core_picked(source: Node = null) -> void:
 		core_count = int(maze.get_vision_core_count())
 	var radius := _current_vision_radius()
 	print("vision core picked: count=%d, vision=%dx%d" % [core_count, radius * 2 + 1, radius * 2 + 1])
+
+func on_greed_button_pressed(source: Node = null) -> void:
+	if maze and maze.has_method("on_greed_button_pressed"):
+		maze.on_greed_button_pressed(source)
+	_refresh_vision()
 
 func on_exit_interacted(exit_type: String) -> void:
 	if maze and maze.has_method("on_exit_interacted"):

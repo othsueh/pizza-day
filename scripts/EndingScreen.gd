@@ -39,8 +39,17 @@ func show_ending(title: String, body: String, hint: String) -> void:
 	var tween := create_tween()
 	tween.tween_property(_root, "modulate:a", 1.0, FADE_SECONDS)
 
+func show_ending_with_recap(title: String, body: String, hint: String, recap: String) -> void:
+	var full_body := body
+	if not recap.is_empty():
+		full_body = "%s\n\n%s" % [body, recap]
+	show_ending(title, full_body, hint)
+
 func show_default_ending() -> void:
 	show_ending(default_title, default_body, default_hint)
+
+func show_default_ending_with_recap(recap: String) -> void:
+	show_ending_with_recap(default_title, default_body, default_hint, recap)
 
 func _build_screen() -> void:
 	_root = Control.new()
