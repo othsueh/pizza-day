@@ -173,19 +173,19 @@ func _show_confirmation_prompt(node: Node) -> void:
 	var instability := 0
 	if maze and maze.has_method("get_instability_value"):
 		instability = int(maze.get_instability_value())
-	var message := "Take the vision core?\nThe maze will remember this."
+	var message := "要取走視野核心嗎？\n邊界會記住你拿過。"
 	if String(node.get_meta("object_type", "")) == "greed_button":
-		message = "Press the red button?\nA wall opens. Instability rises."
+		message = "要按下這顆紅鍵嗎？\n一面牆會被推開，失控值會升起。"
 		if instability >= 70:
-			message = "Press it anyway?\nThe maze is already looking back."
+			message = "還是要按下嗎？\n邊界已經在回望你。"
 	else:
 		if instability >= 70:
-			message = "Take more from the maze?\nIt is already looking back."
+			message = "還要再從邊界拿走嗎？\n它已經在回望你。"
 		elif instability >= 61:
-			message = "Take the vision core?\nThe walls are thin now."
+			message = "要取走視野核心嗎？\n牆已經變薄。"
 		elif instability >= 31:
-			message = "Take the vision core?\nThe maze has started to move."
-	_confirmation_label.text = "%s\n\nE / Enter: take    Esc / Q: leave" % message
+			message = "要取走視野核心嗎？\n邊界開始移動。"
+	_confirmation_label.text = "%s\n\nE / Enter：拿走    Esc / Q：離開" % message
 	_confirmation_layer.visible = true
 
 func _confirm_pending_interaction() -> void:
@@ -207,7 +207,7 @@ func on_wall_hint_read(text: String) -> void:
 	_is_reading_hint = true
 	if _confirmation_layer == null:
 		_create_confirmation_prompt()
-	_confirmation_label.text = "%s\n\nE / Enter / Esc: close" % text
+	_confirmation_label.text = "%s\n\nE / Enter / Esc：關閉" % text
 	_confirmation_layer.visible = true
 
 func _close_wall_hint() -> void:
