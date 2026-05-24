@@ -39,14 +39,21 @@ func _process(_delta: float) -> void:
 	_update_interaction_hint()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not event is InputEventKey or not event.pressed or event.echo:
+	if not event is InputEventKey or not event.pressed:
 		return
+	# Movement keys accept echo events too, so both single taps and held keys
+	# produce a step per event. Modal prompts and interact keep `echo` filtered
+	# below so a single hold can't spam-confirm them.
 	if _is_reading_hint:
+		if event.echo:
+			return
 		if event.keycode in [KEY_E, KEY_ENTER, KEY_KP_ENTER, KEY_ESCAPE, KEY_Q]:
 			_close_wall_hint()
 			get_viewport().set_input_as_handled()
 		return
 	if _pending_confirmation != null:
+		if event.echo:
+			return
 		if event.keycode in [KEY_E, KEY_ENTER, KEY_KP_ENTER]:
 			_confirm_pending_interaction()
 			get_viewport().set_input_as_handled()
@@ -55,6 +62,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		return
 	if event.keycode == KEY_E:
+		if event.echo:
+			return
 		_try_interact()
 		return
 	var dir := _input_direction(event)
